@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOLYX | Market Intelligence Terminal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+  <!-- ============================================================
+       COLD-START SPLASH — shown while server wakes up
+  ============================================================ -->
+  <div class="cold-splash" id="coldSplash">
+    <div class="cold-splash-inner">
+      <div class="cold-splash-logo"><span class="cold-accent">▮</span> SOLYX</div>
+      <div class="cold-splash-subtitle">MARKET INTELLIGENCE TERMINAL</div>
+      <div class="cold-splash-divider"></div>
+      <div class="cold-splash-msg">INITIALISING MARKET DATA<span class="cold-dots"></span></div>
+      <div class="cold-splash-sub">Connecting to data feeds — please wait</div>
+      <div class="cold-splash-bar"><div class="cold-splash-bar-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       LEFT SIDEBAR — Portfolio / Watchlist
+  ============================================================ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <span class="logo-accent">▮</span> SOLYX
+      </div>
+      <div class="sidebar-subtitle">MARKET INTELLIGENCE TERMINAL</div>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-section-label">PORTFOLIO / WATCHLIST</div>
+
+    <div class="wl-refresh-bar">
+      <button class="wl-refresh-all-btn" id="watchlistRefreshBtn">
+        <span class="wl-refresh-icon">↺</span> REFRESH ALL
+      </button>
+    </div>
+
+    <ul class="watchlist-nav" id="watchlistNav">
+      <!-- Populated by app.js -->
+      <li class="watchlist-empty" id="watchlistEmpty">NO SECURITIES SAVED.</li>
+    </ul>
+  </aside>
+
+  <!-- ============================================================
+       MAIN CONTENT
+  ============================================================ -->
+  <main class="main-content">
+
+    <!-- TOP MARKET STRIP -->
+    <div class="market-strip" id="marketStrip">
+      <div class="strip-label">MARKETS</div>
+      <div class="strip-indices" id="stripIndices">
+        <div class="index-card loading">
+          <span class="index-name">S&amp;P 500</span>
+          <span class="index-price">—</span>
+          <span class="index-change">—</span>
+        </div>
+        <div class="index-card loading">
+          <span class="index-name">Nasdaq 100</span>
+          <span class="index-price">—</span>
+          <span class="index-change">—</span>
+        </div>
+        <div class="index-card loading">
+          <span class="index-name">Dow Jones</span>
+          <span class="index-price">—</span>
+          <span class="index-change">—</span>
+        </div>
+      </div>
+      <div class="strip-timestamp" id="stripTimestamp"></div>
+    </div>
+
+    <!-- SEARCH -->
+    <section class="search-section">
+      <div class="section-label">SECURITY LOOKUP</div>
+      <div class="search-row">
+        <div class="search-autocomplete-wrap">
+          <input
+            type="text"
+            id="tickerInput"
+            class="ticker-input"
+            placeholder="Enter ticker symbol — e.g. AAPL, TSLA, MSFT"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div class="autocomplete-dropdown" id="autocompleteDropdown"></div>
+        </div>
+        <button class="search-btn" id="searchBtn">ANALYZE</button>
+      </div>
+      <div class="search-hint">Press Enter or click ANALYZE to load security data.</div>
+    </section>
+
+    <!-- ERROR BANNER -->
+    <div class="error-banner" id="errorBanner" style="display:none;"></div>
+
+    <!-- LOADING INDICATOR -->
+    <div class="loading-indicator" id="loadingIndicator" style="display:none;">
+      <span class="loading-dots">FETCHING DATA<span class="dots">...</span></span>
+    </div>
+
+    <!-- RESULT PANEL (hidden until a stock is loaded) -->
+    <section class="result-panel" id="resultPanel" style="display:none;">
+
+      <!-- Stock header -->
+      <div class="stock-header">
+        <div class="stock-identity">
+          <span class="stock-ticker" id="resSymbol">—</span>
+          <span class="stock-name" id="resName">—</span>
+        </div>
+        <div class="stock-price-row">
+          <span class="stock-price" id="resPrice">—</span>
+          <span class="stock-currency">USD</span>
+        </div>
+        <button class="deep-dive-btn" id="deepDiveBtn" title="Deep Dive Analysis" style="display:none;">↗ DEEP DIVE</button>
+        <button class="bookmark-btn" id="bookmarkBtn" title="Add to watchlist">☆</button>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- Metrics -->
+      <div class="section-label">RISK METRICS</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">BETA</div>
+          <div class="metric-value" id="resBeta">—</div>
+          <div class="metric-sub">Market Sensitivity</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">WACC</div>
+          <div class="metric-value" id="resWacc">—</div>
+          <div class="metric-sub">Cost of Capital</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">D/E RATIO</div>
+          <div class="metric-value" id="resDe">—</div>
+          <div class="metric-sub">Debt / Equity</div>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- Summary -->
+      <div class="section-label">ANALYST NOTE</div>
+      <div class="summary-card">
+        <p class="summary-text" id="resSummary">—</p>
+      </div>
+
+    </section>
+
+    <!-- NPV CALCULATOR — shown after a stock is loaded -->
+    <section class="npv-section" id="npvPanel" style="display:none;">
+      <div class="npv-header-divider">
+        <span class="npv-section-title">NPV ANALYSIS</span>
+      </div>
+
+      <div class="npv-inputs">
+        <div class="npv-field">
+          <label class="npv-label" for="npvInitial">INITIAL INVESTMENT ($)</label>
+          <input class="npv-input" id="npvInitial" type="number" min="1"
+                 placeholder="e.g. 1000000" autocomplete="off" />
+        </div>
+        <div class="npv-field npv-field--wide">
+          <label class="npv-label" for="npvCashFlows">ANNUAL CASH FLOWS — comma separated (up to 10 years)</label>
+          <input class="npv-input" id="npvCashFlows" type="text"
+                 placeholder="e.g. 200000, 250000, 300000, 350000, 400000" autocomplete="off" />
+        </div>
+        <div class="npv-field">
+          <label class="npv-label" for="npvDiscountRate">DISCOUNT RATE (%) — pre-filled from WACC</label>
+          <input class="npv-input" id="npvDiscountRate" type="number" step="0.01" min="0.01" max="99.99"
+                 placeholder="e.g. 8.5" autocomplete="off" />
+        </div>
+        <div class="npv-field npv-field--btn">
+          <button class="npv-calc-btn" id="npvCalcBtn">CALCULATE NPV</button>
+        </div>
+      </div>
+
+      <div class="npv-dirty-hint" id="npvDirtyHint" style="display:none;">
+        ↺ INPUTS CHANGED — RECALCULATE TO UPDATE
+      </div>
+
+      <!-- Results (hidden until calculated) -->
+      <div class="npv-results" id="npvResults" style="display:none;">
+
+        <!-- Summary cards -->
+        <div class="npv-cards" id="npvCards">
+          <div class="npv-card">
+            <div class="npv-card-label">NPV VALUE</div>
+            <div class="npv-card-value" id="npvValueDisplay">—</div>
+          </div>
+          <div class="npv-card">
+            <div class="npv-card-label">PROFITABILITY INDEX</div>
+            <div class="npv-card-value" id="npvPiDisplay">—</div>
+          </div>
+          <div class="npv-card">
+            <div class="npv-card-label">PAYBACK YEAR</div>
+            <div class="npv-card-value" id="npvPaybackDisplay">—</div>
+          </div>
+        </div>
+
+        <!-- Verdict banner -->
+        <div class="npv-verdict" id="npvVerdict"></div>
+
+        <!-- Cumulative NPV chart -->
+        <div class="npv-chart-section">
+          <div class="npv-chart-label">CUMULATIVE NPV PROFILE</div>
+          <div class="npv-canvas-wrap">
+            <canvas id="npvCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- DCF table -->
+        <div class="npv-table-section">
+          <div class="npv-chart-label">DISCOUNTED CASH FLOW TABLE</div>
+          <div class="npv-table-wrap">
+            <table class="npv-table" id="npvTable">
+              <thead>
+                <tr>
+                  <th>YEAR</th>
+                  <th>CASH FLOW</th>
+                  <th>DISCOUNT FACTOR</th>
+                  <th>DISCOUNTED CF</th>
+                  <th>CUMULATIVE NPV</th>
+                </tr>
+              </thead>
+              <tbody id="npvTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Sensitivity table -->
+        <div class="npv-table-section">
+          <div class="npv-chart-label">SENSITIVITY ANALYSIS — DISCOUNT RATE</div>
+          <div class="npv-table-wrap">
+            <table class="npv-table" id="npvSensTable">
+              <thead>
+                <tr>
+                  <th>DISCOUNT RATE</th>
+                  <th>NPV</th>
+                  <th>VERDICT</th>
+                </tr>
+              </thead>
+              <tbody id="npvSensBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /#npvResults -->
+    </section><!-- /#npvPanel -->
+
+    <!-- PLACEHOLDER shown before any search -->
+    <div class="placeholder-panel" id="placeholderPanel">
+      <div class="placeholder-icon">▮</div>
+      <div class="placeholder-title">SOLYX</div>
+      <div class="placeholder-sub">Enter a ticker symbol above to begin analysis.</div>
+      <div class="placeholder-hint">
+        Try: <span class="hint-ticker" data-ticker="AAPL">AAPL</span>
+        &nbsp;·&nbsp; <span class="hint-ticker" data-ticker="TSLA">TSLA</span>
+        &nbsp;·&nbsp; <span class="hint-ticker" data-ticker="MSFT">MSFT</span>
+        &nbsp;·&nbsp; <span class="hint-ticker" data-ticker="NVDA">NVDA</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ============================================================
+       RIGHT SIDEBAR — S&P 500 Live
+  ============================================================ -->
+  <aside class="right-sidebar" id="rightSidebar">
+
+    <div class="right-sidebar-header">
+      <div class="right-sidebar-title">S&amp;P 500</div>
+      <button class="sp500-refresh-btn" id="sp500RefreshBtn" title="Refresh">↻</button>
+    </div>
+
+    <div class="sp500-list-wrap" id="sp500ListWrap">
+      <div class="sp500-loading" id="sp500Loading">
+        FETCHING<span class="dots">...</span>
+      </div>
+      <!-- ul is populated & duplicated by app.js for seamless scroll loop -->
+      <ul class="sp500-list" id="sp500List" style="display:none;"></ul>
+    </div>
+
+  </aside>
+
+  <!-- ============================================================
+       DEEP DIVE MODAL
+  ============================================================ -->
+  <div class="dd-overlay" id="ddOverlay">
+    <div class="dd-modal">
+
+      <!-- Header -->
+      <div class="dd-header">
+        <div class="dd-header-left">
+          <div class="dd-label">DEEP DIVE ANALYSIS</div>
+          <div class="dd-title-row">
+            <span class="dd-symbol" id="ddSymbol">—</span>
+            <span class="dd-name"   id="ddName">—</span>
+          </div>
+          <div class="dd-price-row">
+            <span class="dd-price" id="ddPrice">—</span>
+            <span class="dd-chg"   id="ddChg">—</span>
+          </div>
+        </div>
+        <button class="dd-close-btn" id="ddCloseBtn">×</button>
+      </div>
+
+      <div class="dd-divider"></div>
+
+      <!-- Chart -->
+      <div class="dd-chart-section">
+        <div class="dd-chart-top">
+          <span class="dd-section-label">PRICE PERFORMANCE</span>
+          <div class="dd-period-bar" id="ddPeriodBar">
+            <button class="dd-period-btn" data-period="1wk">1W</button>
+            <button class="dd-period-btn dd-period-active" data-period="1mo">1M</button>
+            <button class="dd-period-btn" data-period="3mo">3M</button>
+            <button class="dd-period-btn" data-period="6mo">6M</button>
+            <button class="dd-period-btn" data-period="1y">1Y</button>
+          </div>
+        </div>
+        <div class="dd-canvas-wrap" id="ddCanvasWrap">
+          <canvas id="ddCanvas"></canvas>
+          <div class="dd-chart-msg" id="ddChartMsg">FETCHING CHART<span class="dots">...</span></div>
+        </div>
+        <div class="dd-stat-row" id="ddStatRow">
+          <div class="dd-stat">
+            <div class="dd-stat-label">PERIOD CHANGE</div>
+            <div class="dd-stat-value" id="ddPeriodChg">—</div>
+          </div>
+          <div class="dd-stat">
+            <div class="dd-stat-label">PERIOD HIGH</div>
+            <div class="dd-stat-value" id="ddPeriodHigh">—</div>
+          </div>
+          <div class="dd-stat">
+            <div class="dd-stat-label">PERIOD LOW</div>
+            <div class="dd-stat-value" id="ddPeriodLow">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dd-divider"></div>
+
+      <!-- Ratios strip -->
+      <div class="dd-ratios-strip">
+        <div class="dd-ratio-card">
+          <div class="dd-ratio-label">β BETA</div>
+          <div class="dd-ratio-value" id="ddRatioBeta">—</div>
+        </div>
+        <div class="dd-ratio-card">
+          <div class="dd-ratio-label">WACC</div>
+          <div class="dd-ratio-value" id="ddRatioWacc">—</div>
+        </div>
+        <div class="dd-ratio-card">
+          <div class="dd-ratio-label">D/E RATIO</div>
+          <div class="dd-ratio-value" id="ddRatioDe">—</div>
+        </div>
+      </div>
+
+      <div class="dd-divider"></div>
+
+      <!-- News -->
+      <div class="dd-news-section">
+        <div class="dd-section-label">LATEST NEWS</div>
+        <div class="dd-news-list" id="ddNewsList">
+          <div class="dd-chart-msg" id="ddNewsMsg">FETCHING NEWS<span class="dots">...</span></div>
+        </div>
+      </div>
+
+    </div><!-- /.dd-modal -->
+  </div><!-- /.dd-overlay -->
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
