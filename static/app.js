@@ -296,10 +296,26 @@ function renderResult(data) {
   document.getElementById("npvResults").style.display   = "none";
   document.getElementById("npvDirtyHint").style.display = "none";
 
-  // Reset override flags so new stock pre-fills cleanly
+  // Reset all NPV state for the new symbol
   npvOverride.revenue = false;
   npvOverride.costs   = false;
   npvOverride.growth  = false;
+  currentFinancials   = null;
+
+  // Clear previous source labels and fields
+  npvClearSources();
+  ["npvAnnualRevenue","npvAnnualCosts","npvGrowthRate"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ""; el.classList.remove("npv-input--auto","npv-input--custom"); }
+  });
+  ["npvRevenueBadge","npvCostsBadge","npvGrowthBadge"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  ["npvRevenueHint","npvCostsHint","npvGrowthHint"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
 
   // Fetch real financials and pre-fill NPV fields
   fetchAndFillFinancials(data.symbol, data.wacc);
@@ -836,72 +852,10 @@ function npvClearSources() {
 }
 
 // ---------------------------------------------------------------------------
-// Fetch real financials from yfinance and pre-fill NPV fields
+// NPV auto-fill state
 // ---------------------------------------------------------------------------
-async function fetchAndFillFinancials(symbol, wacc) {
-  const loading    = document.getElementById("npvDataLoading");
-  const unavailable = document.getElementById("npvUnavailable");
-  if (loading)    loading.style.display = "";
-  if (unavailable) unavailable.style.display = "none";
-  npvClearSources();
-
-  try {
-    const res  = await fetch(`/api/financials?symbol=${encodeURIComponent(symbol)}`);
-    const data = await res.json();
-    if (loading) loading.style.display = "none";
-
-    const hasData = data.annual_revenue != null || data.annual_costs != null;
-
-    if (!hasData) {
-      if (unavailable) unavailable.style.display = "";
-      return;
-    }
-
-    const yr    = data.data_year ? `FY${data.data_year}` : "latest";
-    const notes = data.source_notes || {};
-
-    // Revenue
-    if (data.annual_revenue != null && !npvOverride.revenue) {
-      document.getElementById("npvAnnualRevenue").value = Math.round(data.annual_revenue);
-      npvSetAutoState("npvAnnualRevenue","npvRevenueBadge","npvRevenueHint", true);
-      npvSetSource("npvRevenueSource",
-        `${notes.revenue || "Annual income statement"} — ${fmtFinancialShort(data.annual_revenue)} (${yr})`);
-    }
-
-    // Costs
-    if (data.annual_costs != null && !npvOverride.costs) {
-      document.getElementById("npvAnnualCosts").value = Math.round(data.annual_costs);
-      npvSetAutoState("npvAnnualCosts","npvCostsBadge","npvCostsHint", true);
-      npvSetSource("npvCostsSource",
-        `${notes.costs || "Annual income statement"} — ${fmtFinancialShort(data.annual_costs)} (${yr})`);
-    }
-
-    // Growth rate
-    if (data.growth_rate != null && !npvOverride.growth) {
-      document.getElementById("npvGrowthRate").value = (data.growth_rate * 100).toFixed(1);
-      npvSetAutoState("npvGrowthRate","npvGrowthBadge","npvGrowthHint", true);
-      npvSetSource("npvGrowthSource",
-        `${notes.growth || "2-year revenue comparison"} — ${(data.growth_rate * 100).toFixed(1)}%`);
-    }
-
-    // Discount rate (WACC) — only if not user-edited
-    const rateEl = document.getElementById("npvDiscountRate");
-    if (wacc != null && rateEl && !rateEl.dataset.userEdited) {
-      rateEl.value = (wacc * 100).toFixed(2);
-      npvSetSource("npvRateSource", `Calculated WACC — ${(wacc * 100).toFixed(2)}%`);
-    }
-
-    npvMarkDirty();
-
-  } catch (_) {
-    if (loading)    loading.style.display = "none";
-    if (unavailable) unavailable.style.display = "";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// NPV auto-fill — estimate revenue, costs, growth from initial investment
-// ---------------------------------------------------------------------------
+let currentFinancials = null;   // real yfinance data for current symbol
+let _currentWacc      = null;   // WACC for current symbol
 const npvOverride = { revenue: false, costs: false, growth: false };
 let   _npvAutoTimer = null;
 
@@ -910,39 +864,140 @@ function npvSetAutoState(fieldId, badgeId, hintId, isAuto) {
   const badge = document.getElementById(badgeId);
   const hint  = document.getElementById(hintId);
   if (!input || !badge || !hint) return;
-
   if (isAuto) {
     input.classList.add("npv-input--auto");
     input.classList.remove("npv-input--custom");
-    badge.textContent = "AUTO";
-    badge.className   = "npv-auto-badge npv-auto-badge--auto";
+    badge.textContent   = "AUTO";
+    badge.className     = "npv-auto-badge npv-auto-badge--auto";
     badge.style.display = "";
     hint.style.display  = "";
   } else {
     input.classList.remove("npv-input--auto");
     input.classList.add("npv-input--custom");
-    badge.textContent = "CUSTOM";
-    badge.className   = "npv-auto-badge npv-auto-badge--custom";
+    badge.textContent   = "CUSTOM";
+    badge.className     = "npv-auto-badge npv-auto-badge--custom";
     badge.style.display = "";
     hint.style.display  = "none";
   }
 }
 
+function npvSetLoadingMsg(text, color) {
+  const el = document.getElementById("npvDataLoading");
+  if (!el) return;
+  el.textContent   = text;
+  el.style.color   = color || "";
+  el.style.display = text ? "" : "none";
+}
+
+// ---------------------------------------------------------------------------
+// applyFinancials — write currentFinancials into the NPV input fields
+// ---------------------------------------------------------------------------
+function applyFinancials() {
+  if (!currentFinancials) return;
+  const fin   = currentFinancials;
+  const yr    = fin.data_year ? `FY${fin.data_year}` : "latest";
+  const notes = fin.source_notes || {};
+
+  if (fin.annual_revenue != null && !npvOverride.revenue) {
+    document.getElementById("npvAnnualRevenue").value = Math.round(fin.annual_revenue);
+    npvSetAutoState("npvAnnualRevenue","npvRevenueBadge","npvRevenueHint", true);
+    npvSetSource("npvRevenueSource",
+      `${notes.revenue || "Annual income statement"} — ${fmtFinancialShort(fin.annual_revenue)} (${yr})`);
+    console.log("[NPV PREFILL] Revenue:", fin.annual_revenue);
+  }
+  if (fin.annual_costs != null && !npvOverride.costs) {
+    document.getElementById("npvAnnualCosts").value = Math.round(fin.annual_costs);
+    npvSetAutoState("npvAnnualCosts","npvCostsBadge","npvCostsHint", true);
+    npvSetSource("npvCostsSource",
+      `${notes.costs || "Annual income statement"} — ${fmtFinancialShort(fin.annual_costs)} (${yr})`);
+    console.log("[NPV PREFILL] Costs:", fin.annual_costs);
+  }
+  if (fin.growth_rate != null && !npvOverride.growth) {
+    document.getElementById("npvGrowthRate").value = (fin.growth_rate * 100).toFixed(1);
+    npvSetAutoState("npvGrowthRate","npvGrowthBadge","npvGrowthHint", true);
+    npvSetSource("npvGrowthSource",
+      `${notes.growth || "2-year revenue comparison"} — ${(fin.growth_rate * 100).toFixed(1)}%`);
+    console.log("[NPV PREFILL] Growth:", fin.growth_rate);
+  }
+  if (_currentWacc != null) {
+    const rateEl = document.getElementById("npvDiscountRate");
+    if (rateEl && !rateEl.dataset.userEdited) {
+      rateEl.value = (_currentWacc * 100).toFixed(2);
+      npvSetSource("npvRateSource", `Calculated WACC — ${(_currentWacc * 100).toFixed(2)}%`);
+    }
+  }
+  npvMarkDirty();
+}
+
+// ---------------------------------------------------------------------------
+// Fetch real financials from yfinance and pre-fill NPV fields
+// ---------------------------------------------------------------------------
+async function fetchAndFillFinancials(symbol, wacc) {
+  currentFinancials = null;
+  _currentWacc      = wacc;
+
+  const unavailable = document.getElementById("npvUnavailable");
+  if (unavailable) unavailable.style.display = "none";
+  npvClearSources();
+  npvSetLoadingMsg(`↻ LOADING FINANCIAL DATA FOR ${symbol}…`, "var(--accent)");
+
+  try {
+    const res  = await fetch(`/api/financials?symbol=${encodeURIComponent(symbol)}`);
+    const data = await res.json();
+    console.log("[FINANCIALS] Loaded for", symbol, data);
+
+    const hasData = data.annual_revenue != null || data.annual_costs != null;
+
+    if (!hasData) {
+      npvSetLoadingMsg("FINANCIAL DATA UNAVAILABLE — ENTER VALUES MANUALLY", "var(--text-dim)");
+      if (unavailable) unavailable.style.display = "";
+      return;
+    }
+
+    currentFinancials = data;
+    npvSetLoadingMsg("✓ FINANCIAL DATA LOADED — ENTER INVESTMENT TO BEGIN", "#22c55e");
+    setTimeout(() => npvSetLoadingMsg(""), 4000);
+
+    // Apply immediately (don't wait for initial investment input)
+    applyFinancials();
+
+  } catch (err) {
+    console.error("[FINANCIALS] Failed to load:", err);
+    npvSetLoadingMsg("FINANCIAL DATA UNAVAILABLE — ENTER VALUES MANUALLY", "var(--text-dim)");
+    if (unavailable) unavailable.style.display = "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// npvAutoFill — triggered when user types Initial Investment
+// Uses real financials if loaded, falls back to estimates only if not
+// ---------------------------------------------------------------------------
 function npvAutoFill() {
   const initial = parseFloat(document.getElementById("npvInitial").value);
   if (isNaN(initial) || initial <= 0) return;
 
+  if (currentFinancials) {
+    // Real data is loaded — just apply it (don't overwrite with estimates)
+    applyFinancials();
+    return;
+  }
+
+  // No real data — fall back to percentage estimates
+  console.log("[NPV PREFILL] No financials loaded, using estimates");
   if (!npvOverride.revenue) {
     document.getElementById("npvAnnualRevenue").value = Math.round(initial * 0.20);
-    npvSetAutoState("npvAnnualRevenue", "npvRevenueBadge", "npvRevenueHint", true);
+    npvSetAutoState("npvAnnualRevenue","npvRevenueBadge","npvRevenueHint", true);
+    npvSetSource("npvRevenueSource", "Estimated — 20% of initial investment");
   }
   if (!npvOverride.costs) {
     document.getElementById("npvAnnualCosts").value = Math.round(initial * 0.08);
-    npvSetAutoState("npvAnnualCosts", "npvCostsBadge", "npvCostsHint", true);
+    npvSetAutoState("npvAnnualCosts","npvCostsBadge","npvCostsHint", true);
+    npvSetSource("npvCostsSource", "Estimated — 8% of initial investment");
   }
   if (!npvOverride.growth) {
     document.getElementById("npvGrowthRate").value = 5;
-    npvSetAutoState("npvGrowthRate", "npvGrowthBadge", "npvGrowthHint", true);
+    npvSetAutoState("npvGrowthRate","npvGrowthBadge","npvGrowthHint", true);
+    npvSetSource("npvGrowthSource", "Default conservative growth assumption");
   }
 }
 
