@@ -158,6 +158,11 @@
     <section class="npv-section" id="npvPanel" style="display:none;">
       <div class="npv-header-divider">
         <span class="npv-section-title">NPV ANALYSIS</span>
+        <span class="npv-data-loading" id="npvDataLoading" style="display:none;">↻ LOADING FINANCIALS…</span>
+      </div>
+
+      <div class="npv-unavailable" id="npvUnavailable" style="display:none;">
+        FINANCIAL STATEMENTS UNAVAILABLE FOR THIS SECURITY — ENTER VALUES MANUALLY
       </div>
 
       <div class="npv-inputs">
@@ -174,6 +179,7 @@
           <input class="npv-input" id="npvAnnualRevenue" type="number" min="0"
                  placeholder="e.g. 500000" autocomplete="off" />
           <div class="npv-auto-hint" id="npvRevenueHint" style="display:none;">Auto-estimated — click to override</div>
+          <div class="npv-source-label" id="npvRevenueSource" style="display:none;"></div>
         </div>
         <div class="npv-field">
           <div class="npv-label-row">
@@ -183,6 +189,7 @@
           <input class="npv-input" id="npvAnnualCosts" type="number" min="0"
                  placeholder="e.g. 200000" autocomplete="off" />
           <div class="npv-auto-hint" id="npvCostsHint" style="display:none;">Auto-estimated — click to override</div>
+          <div class="npv-source-label" id="npvCostsSource" style="display:none;"></div>
         </div>
         <div class="npv-field">
           <label class="npv-label" for="npvLifespan">INVESTMENT LIFESPAN (YEARS)</label>
@@ -212,11 +219,13 @@
           <input class="npv-input" id="npvGrowthRate" type="number" step="0.1" min="-50" max="200"
                  placeholder="e.g. 5" value="0" autocomplete="off" />
           <div class="npv-auto-hint" id="npvGrowthHint" style="display:none;">Auto-estimated — click to override</div>
+          <div class="npv-source-label" id="npvGrowthSource" style="display:none;"></div>
         </div>
         <div class="npv-field">
           <label class="npv-label" for="npvDiscountRate">DISCOUNT RATE (%) — pre-filled from WACC</label>
           <input class="npv-input" id="npvDiscountRate" type="number" step="0.01" min="0.01" max="99.99"
                  placeholder="e.g. 8.5" autocomplete="off" />
+          <div class="npv-source-label" id="npvRateSource" style="display:none;"></div>
         </div>
         <div class="npv-field npv-field--btn">
           <button class="npv-calc-btn" id="npvCalcBtn">CALCULATE NPV</button>

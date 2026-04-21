@@ -1314,6 +1314,40 @@ select.npv-input {
   letter-spacing: 0.06em;
   margin-top: 4px;
 }
+
+.npv-source-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #5a9e6f;
+  letter-spacing: 0.05em;
+  margin-top: 3px;
+}
+
+.npv-data-loading {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  margin-left: 12px;
+  animation: npvPulse 1.2s ease-in-out infinite;
+}
+@keyframes npvPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.npv-unavailable {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 2px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  text-align: center;
+}
 .npv-table-note {
   font-size: 10px;
   color: var(--text-dim);

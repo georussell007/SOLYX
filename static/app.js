@@ -296,6 +296,14 @@ function renderResult(data) {
   document.getElementById("npvResults").style.display   = "none";
   document.getElementById("npvDirtyHint").style.display = "none";
 
+  // Reset override flags so new stock pre-fills cleanly
+  npvOverride.revenue = false;
+  npvOverride.costs   = false;
+  npvOverride.growth  = false;
+
+  // Fetch real financials and pre-fill NPV fields
+  fetchAndFillFinancials(data.symbol, data.wacc);
+
   // Refresh watchlist entry if already bookmarked
   if (inWatchlist(data.symbol)) {
     const entry = watchlist.find(w => w.symbol === data.symbol);
@@ -802,6 +810,93 @@ function _npvFmt(val) {
 function _dollarFmt(val) {
   if (val == null) return "—";
   return "$" + Math.abs(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ---------------------------------------------------------------------------
+// NPV smart-fill helpers
+// ---------------------------------------------------------------------------
+function fmtFinancialShort(val) {
+  if (val == null) return "";
+  const abs = Math.abs(val);
+  if (abs >= 1e9) return "$" + (val / 1e9).toFixed(1) + "B";
+  if (abs >= 1e6) return "$" + (val / 1e6).toFixed(1) + "M";
+  if (abs >= 1e3) return "$" + Math.round(val).toLocaleString("en-US");
+  return "$" + Math.round(val);
+}
+
+function npvSetSource(sourceId, text) {
+  const el = document.getElementById(sourceId);
+  if (!el) return;
+  if (text) { el.textContent = "Source: " + text; el.style.display = ""; }
+  else       { el.style.display = "none"; el.textContent = ""; }
+}
+
+function npvClearSources() {
+  ["npvRevenueSource","npvCostsSource","npvGrowthSource","npvRateSource"].forEach(id => npvSetSource(id, ""));
+}
+
+// ---------------------------------------------------------------------------
+// Fetch real financials from yfinance and pre-fill NPV fields
+// ---------------------------------------------------------------------------
+async function fetchAndFillFinancials(symbol, wacc) {
+  const loading    = document.getElementById("npvDataLoading");
+  const unavailable = document.getElementById("npvUnavailable");
+  if (loading)    loading.style.display = "";
+  if (unavailable) unavailable.style.display = "none";
+  npvClearSources();
+
+  try {
+    const res  = await fetch(`/api/financials?symbol=${encodeURIComponent(symbol)}`);
+    const data = await res.json();
+    if (loading) loading.style.display = "none";
+
+    const hasData = data.annual_revenue != null || data.annual_costs != null;
+
+    if (!hasData) {
+      if (unavailable) unavailable.style.display = "";
+      return;
+    }
+
+    const yr    = data.data_year ? `FY${data.data_year}` : "latest";
+    const notes = data.source_notes || {};
+
+    // Revenue
+    if (data.annual_revenue != null && !npvOverride.revenue) {
+      document.getElementById("npvAnnualRevenue").value = Math.round(data.annual_revenue);
+      npvSetAutoState("npvAnnualRevenue","npvRevenueBadge","npvRevenueHint", true);
+      npvSetSource("npvRevenueSource",
+        `${notes.revenue || "Annual income statement"} — ${fmtFinancialShort(data.annual_revenue)} (${yr})`);
+    }
+
+    // Costs
+    if (data.annual_costs != null && !npvOverride.costs) {
+      document.getElementById("npvAnnualCosts").value = Math.round(data.annual_costs);
+      npvSetAutoState("npvAnnualCosts","npvCostsBadge","npvCostsHint", true);
+      npvSetSource("npvCostsSource",
+        `${notes.costs || "Annual income statement"} — ${fmtFinancialShort(data.annual_costs)} (${yr})`);
+    }
+
+    // Growth rate
+    if (data.growth_rate != null && !npvOverride.growth) {
+      document.getElementById("npvGrowthRate").value = (data.growth_rate * 100).toFixed(1);
+      npvSetAutoState("npvGrowthRate","npvGrowthBadge","npvGrowthHint", true);
+      npvSetSource("npvGrowthSource",
+        `${notes.growth || "2-year revenue comparison"} — ${(data.growth_rate * 100).toFixed(1)}%`);
+    }
+
+    // Discount rate (WACC) — only if not user-edited
+    const rateEl = document.getElementById("npvDiscountRate");
+    if (wacc != null && rateEl && !rateEl.dataset.userEdited) {
+      rateEl.value = (wacc * 100).toFixed(2);
+      npvSetSource("npvRateSource", `Calculated WACC — ${(wacc * 100).toFixed(2)}%`);
+    }
+
+    npvMarkDirty();
+
+  } catch (_) {
+    if (loading)    loading.style.display = "none";
+    if (unavailable) unavailable.style.display = "";
+  }
 }
 
 // ---------------------------------------------------------------------------

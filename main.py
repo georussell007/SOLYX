@@ -615,6 +615,163 @@ def api_chart():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/financials")
+def api_financials():
+    symbol = request.args.get("symbol", "").upper().strip()
+    if not symbol:
+        return jsonify({"error": "symbol required"}), 400
+
+    t = yf.Ticker(symbol)
+    result = {
+        "symbol":           symbol,
+        "name":             symbol,
+        "annual_revenue":   None,
+        "annual_costs":     None,
+        "annual_cash_flow": None,
+        "growth_rate":      None,
+        "data_year":        None,
+        "source_notes":     {},
+    }
+
+    # ── name ──────────────────────────────────────────────────────────────
+    info = {}
+    try:
+        info = t.info or {}
+        result["name"] = info.get("longName") or info.get("shortName") or symbol
+    except Exception:
+        pass
+
+    # ── income statement ──────────────────────────────────────────────────
+    fin = None
+    try:
+        fin = t.financials
+        if fin is None or fin.empty:
+            fin = t.income_stmt
+    except Exception:
+        pass
+
+    # ── cash flow statement ───────────────────────────────────────────────
+    cf_stmt = None
+    try:
+        cf_stmt = t.cashflow
+    except Exception:
+        pass
+
+    if fin is not None and not fin.empty:
+        # Data year from most-recent column header
+        try:
+            col = fin.columns[0]
+            result["data_year"] = str(col.year) if hasattr(col, "year") else str(col)[:4]
+        except Exception:
+            pass
+
+        # ── Revenue ──────────────────────────────────────────────────────
+        rev_labels = [
+            "Total Revenue",
+            "Net Interest Income",
+            "Total Net Revenue",
+            "Revenue",
+        ]
+        for lbl in rev_labels:
+            if lbl in fin.index:
+                try:
+                    val = fin.loc[lbl].iloc[0]
+                    if val is not None and not pd.isna(val) and float(val) > 0:
+                        result["annual_revenue"] = float(val)
+                        result["source_notes"]["revenue"] = f"{lbl} — annual income statement"
+                        break
+                except Exception:
+                    pass
+
+        if result["annual_revenue"] is None:
+            rv = info.get("totalRevenue")
+            if rv:
+                result["annual_revenue"] = float(rv)
+                result["source_notes"]["revenue"] = "Total Revenue — company profile"
+
+        # ── Operating Costs ──────────────────────────────────────────────
+        cost_labels = [
+            "Operating Expense",
+            "Total Expenses",
+            "Non Interest Expense",
+        ]
+        for lbl in cost_labels:
+            if lbl in fin.index:
+                try:
+                    val = fin.loc[lbl].iloc[0]
+                    if val is not None and not pd.isna(val):
+                        result["annual_costs"] = abs(float(val))
+                        result["source_notes"]["costs"] = f"{lbl} — annual income statement"
+                        break
+                except Exception:
+                    pass
+
+        # CoR + OpEx combined
+        if result["annual_costs"] is None:
+            try:
+                cor = fin.loc["Cost Of Revenue"].iloc[0] if "Cost Of Revenue" in fin.index else None
+                oe  = fin.loc["Operating Expense"].iloc[0] if "Operating Expense" in fin.index else None
+                if cor is not None and oe is not None and not pd.isna(cor) and not pd.isna(oe):
+                    result["annual_costs"] = abs(float(cor)) + abs(float(oe))
+                    result["source_notes"]["costs"] = "Cost of Revenue + Operating Expense"
+            except Exception:
+                pass
+
+        if result["annual_costs"] is None:
+            oe = info.get("operatingExpenses")
+            if oe:
+                result["annual_costs"] = abs(float(oe))
+                result["source_notes"]["costs"] = "Operating Expenses — company profile"
+
+        # ── Revenue Growth Rate ───────────────────────────────────────────
+        if "Total Revenue" in fin.index and len(fin.columns) >= 2:
+            try:
+                r0 = float(fin.loc["Total Revenue"].iloc[0])
+                r1 = float(fin.loc["Total Revenue"].iloc[1])
+                if r1 and not pd.isna(r0) and not pd.isna(r1):
+                    growth = (r0 - r1) / abs(r1)
+                    result["growth_rate"] = round(max(-0.5, min(1.0, growth)), 4)
+                    result["source_notes"]["growth"] = "2-year revenue CAGR — income statement"
+            except Exception:
+                pass
+
+        if result["growth_rate"] is None:
+            rg = info.get("revenueGrowth")
+            if rg is not None:
+                result["growth_rate"] = round(max(-0.5, min(1.0, float(rg))), 4)
+                result["source_notes"]["growth"] = "Revenue growth — company profile"
+
+    # ── Free Cash Flow ────────────────────────────────────────────────────
+    if cf_stmt is not None and not cf_stmt.empty:
+        for lbl in ["Free Cash Flow", "Operating Cash Flow"]:
+            if lbl in cf_stmt.index:
+                try:
+                    val = cf_stmt.loc[lbl].iloc[0]
+                    if val is not None and not pd.isna(val):
+                        result["annual_cash_flow"] = float(val)
+                        result["source_notes"]["cash_flow"] = f"{lbl} — cash flow statement"
+                        break
+                except Exception:
+                    pass
+
+    # ── Costs fallback: Revenue − FCF ─────────────────────────────────────
+    if (result["annual_costs"] is None
+            and result["annual_revenue"] is not None
+            and result["annual_cash_flow"] is not None):
+        result["annual_costs"] = result["annual_revenue"] - result["annual_cash_flow"]
+        result["source_notes"]["costs"] = "Estimated: Revenue minus Free Cash Flow"
+
+    # ── Debug output ──────────────────────────────────────────────────────
+    print(f"[FINANCIALS] {symbol}")
+    print(f"  Revenue:        {result['annual_revenue']}")
+    print(f"  Operating Costs:{result['annual_costs']}")
+    print(f"  Free Cash Flow: {result['annual_cash_flow']}")
+    print(f"  Growth Rate:    {result['growth_rate']}")
+    print(f"  Data Year:      {result['data_year']}")
+
+    return jsonify(result)
+
+
 @app.route("/api/npv", methods=["POST"])
 def api_npv():
     try:
