@@ -806,24 +806,28 @@ function _dollarFmt(val) {
 
 async function calculateNpv() {
   const initialRaw  = document.getElementById("npvInitial").value.trim();
-  const cashFlowRaw = document.getElementById("npvCashFlows").value.trim();
+  const revenueRaw  = document.getElementById("npvAnnualRevenue").value.trim();
+  const costsRaw    = document.getElementById("npvAnnualCosts").value.trim();
+  const lifespan    = parseInt(document.getElementById("npvLifespan").value, 10);
+  const growthRaw   = document.getElementById("npvGrowthRate").value.trim();
   const rateRaw     = document.getElementById("npvDiscountRate").value.trim();
 
-  if (!initialRaw || !cashFlowRaw || !rateRaw) {
-    alert("Please fill in all three fields before calculating.");
+  if (!initialRaw || !revenueRaw || !costsRaw || !rateRaw) {
+    alert("Please fill in all fields before calculating.");
     return;
   }
 
-  const initial  = parseFloat(initialRaw);
-  const rate     = parseFloat(rateRaw) / 100;  // convert % to decimal
-  const cashFlows = cashFlowRaw.split(",")
-    .map(s => parseFloat(s.trim()))
-    .filter(n => !isNaN(n))
-    .slice(0, 10);
+  const initial    = parseFloat(initialRaw);
+  const revenue    = parseFloat(revenueRaw);
+  const costs      = parseFloat(costsRaw);
+  const growthRate = parseFloat(growthRaw || "0") / 100;
+  const rate       = parseFloat(rateRaw) / 100;
 
-  if (isNaN(initial) || initial <= 0) { alert("Initial investment must be a positive number."); return; }
-  if (cashFlows.length === 0)          { alert("Enter at least one cash flow value."); return; }
-  if (isNaN(rate) || rate <= 0 || rate >= 1) { alert("Discount rate must be between 0.01% and 99.99%."); return; }
+  if (isNaN(initial) || initial <= 0)               { alert("Initial investment must be a positive number."); return; }
+  if (isNaN(revenue) || revenue < 0)                { alert("Annual revenue must be a non-negative number."); return; }
+  if (isNaN(costs)   || costs < 0)                  { alert("Annual costs must be a non-negative number."); return; }
+  if (isNaN(rate) || rate <= 0 || rate >= 1)        { alert("Discount rate must be between 0.01% and 99.99%."); return; }
+  if (isNaN(growthRate) || growthRate < -0.5)       { alert("Growth rate must be greater than -50%."); return; }
 
   const btn = document.getElementById("npvCalcBtn");
   btn.textContent = "CALCULATING...";
@@ -833,7 +837,14 @@ async function calculateNpv() {
     const res  = await fetch("/api/npv", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ initial_investment: initial, cash_flows: cashFlows, discount_rate: rate }),
+      body:    JSON.stringify({
+        initial_investment: initial,
+        annual_revenue:     revenue,
+        annual_costs:       costs,
+        growth_rate:        growthRate,
+        lifespan:           lifespan,
+        discount_rate:      rate,
+      }),
     });
     const data = await res.json();
 
@@ -888,14 +899,14 @@ function renderNpvResults(data) {
 
   // ── DCF Table ──
   const tbody = document.getElementById("npvTableBody");
-  const rate  = inputs.discount_rate || 0;
-  const cfs   = inputs.cash_flows    || [];
+  const rate  = inputs.discount_rate      || 0;
+  const cfs   = data.cash_flows           || [];
   const init  = inputs.initial_investment || 0;
 
   // Year 0 row (initial investment)
   let rows = `<tr>
     <td>Year 0</td>
-    <td>${_dollarFmt(-init)}</td>
+    <td class="npv-auto-cf">—</td>
     <td>1.0000</td>
     <td class="cum-negative">${_dollarFmt(-init)}</td>
     <td class="cum-negative">${_npvFmt(-init)}</td>
@@ -909,7 +920,7 @@ function renderNpvResults(data) {
     const cumCls  = cum >= 0 ? "cum-positive" : "cum-negative";
     rows += `<tr>
       <td>Year ${t}</td>
-      <td>${_dollarFmt(cf)}</td>
+      <td class="npv-auto-cf">${_dollarFmt(cf)}</td>
       <td>${factor.toFixed(4)}</td>
       <td>${_dollarFmt(dcf)}</td>
       <td class="${cumCls}">${_npvFmt(cum)}</td>
@@ -1135,8 +1146,9 @@ function wireEvents() {
   document.getElementById("npvCalcBtn").addEventListener("click", calculateNpv);
 
   // Mark dirty when any input changes; track manual edits to discount rate
-  ["npvInitial", "npvCashFlows"].forEach(id => {
+  ["npvInitial", "npvAnnualRevenue", "npvAnnualCosts", "npvGrowthRate", "npvLifespan"].forEach(id => {
     document.getElementById(id).addEventListener("input", npvMarkDirty);
+    document.getElementById(id).addEventListener("change", npvMarkDirty);
   });
   const npvRateField = document.getElementById("npvDiscountRate");
   npvRateField.addEventListener("input", () => {

@@ -619,32 +619,43 @@ def api_chart():
 def api_npv():
     try:
         body = request.get_json(force=True) or {}
-        initial  = body.get("initial_investment")
-        cfs_raw  = body.get("cash_flows")
-        rate     = body.get("discount_rate")
+
+        initial      = body.get("initial_investment")
+        annual_rev   = body.get("annual_revenue")
+        annual_costs = body.get("annual_costs")
+        growth_rate  = body.get("growth_rate", 0.0)
+        lifespan     = body.get("lifespan", 5)
+        rate         = body.get("discount_rate")
 
         # Validate
         if initial is None or not isinstance(initial, (int, float)) or initial <= 0:
             return jsonify({"error": "initial_investment must be a positive number"}), 400
-        if not cfs_raw or not isinstance(cfs_raw, list) or len(cfs_raw) == 0:
-            return jsonify({"error": "cash_flows must be a non-empty array of numbers"}), 400
+        if annual_rev is None or not isinstance(annual_rev, (int, float)) or annual_rev < 0:
+            return jsonify({"error": "annual_revenue must be a non-negative number"}), 400
+        if annual_costs is None or not isinstance(annual_costs, (int, float)) or annual_costs < 0:
+            return jsonify({"error": "annual_costs must be a non-negative number"}), 400
+        if not isinstance(lifespan, int) or not (1 <= lifespan <= 15):
+            return jsonify({"error": "lifespan must be an integer between 1 and 15"}), 400
+        if not isinstance(growth_rate, (int, float)) or not (-0.5 <= growth_rate <= 2.0):
+            return jsonify({"error": "growth_rate must be a decimal between -0.5 and 2.0"}), 400
         if rate is None or not isinstance(rate, (int, float)) or not (0 < rate < 1):
             return jsonify({"error": "discount_rate must be between 0 and 1 (exclusive)"}), 400
-        if len(cfs_raw) > 10:
-            cfs_raw = cfs_raw[:10]
 
+        # Auto-calculate cash flows from inputs
+        base_cf    = annual_rev - annual_costs
+        salvage    = round(initial * 0.10, 2)
         cash_flows = []
-        for v in cfs_raw:
-            try:
-                cash_flows.append(float(v))
-            except Exception:
-                return jsonify({"error": "cash_flows must contain only numbers"}), 400
+        for year in range(1, lifespan + 1):
+            cf = base_cf * ((1 + growth_rate) ** (year - 1))
+            if year == lifespan:
+                cf += salvage
+            cash_flows.append(round(cf, 2))
 
-        # Core calculation
+        # Core NPV calculation
         def _npv(r, inv, cfs):
             return -inv + sum(cf / (1 + r) ** (t + 1) for t, cf in enumerate(cfs))
 
-        npv_val   = _npv(rate, initial, cash_flows)
+        npv_val    = _npv(rate, initial, cash_flows)
         discounted = [round(cf / (1 + rate) ** (t + 1), 2) for t, cf in enumerate(cash_flows)]
         cumulative = []
         running    = -initial
@@ -660,8 +671,8 @@ def api_npv():
 
         pi = round((npv_val + initial) / initial, 4)
 
-        # Sensitivity: test 5 rates centred on base rate
-        steps    = [-0.04, -0.02, 0.0, 0.02, 0.04]
+        # Sensitivity: 5 rates centred on base
+        steps       = [-0.04, -0.02, 0.0, 0.02, 0.04]
         sensitivity = []
         for delta in steps:
             r2 = round(rate + delta, 6)
@@ -674,14 +685,19 @@ def api_npv():
 
         return jsonify({
             "npv":                   round(npv_val, 2),
+            "cash_flows":            cash_flows,
             "discounted_cash_flows": discounted,
             "cumulative_cash_flows": cumulative,
             "payback_year":          payback_year,
             "profitability_index":   pi,
             "sensitivity":           sensitivity,
+            "salvage_value":         salvage,
             "inputs": {
                 "initial_investment": initial,
-                "cash_flows":         cash_flows,
+                "annual_revenue":     annual_rev,
+                "annual_costs":       annual_costs,
+                "growth_rate":        growth_rate,
+                "lifespan":           lifespan,
                 "discount_rate":      rate,
             },
         })
