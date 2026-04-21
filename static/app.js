@@ -804,6 +804,73 @@ function _dollarFmt(val) {
   return "$" + Math.abs(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// ---------------------------------------------------------------------------
+// NPV auto-fill — estimate revenue, costs, growth from initial investment
+// ---------------------------------------------------------------------------
+const npvOverride = { revenue: false, costs: false, growth: false };
+let   _npvAutoTimer = null;
+
+function npvSetAutoState(fieldId, badgeId, hintId, isAuto) {
+  const input = document.getElementById(fieldId);
+  const badge = document.getElementById(badgeId);
+  const hint  = document.getElementById(hintId);
+  if (!input || !badge || !hint) return;
+
+  if (isAuto) {
+    input.classList.add("npv-input--auto");
+    input.classList.remove("npv-input--custom");
+    badge.textContent = "AUTO";
+    badge.className   = "npv-auto-badge npv-auto-badge--auto";
+    badge.style.display = "";
+    hint.style.display  = "";
+  } else {
+    input.classList.remove("npv-input--auto");
+    input.classList.add("npv-input--custom");
+    badge.textContent = "CUSTOM";
+    badge.className   = "npv-auto-badge npv-auto-badge--custom";
+    badge.style.display = "";
+    hint.style.display  = "none";
+  }
+}
+
+function npvAutoFill() {
+  const initial = parseFloat(document.getElementById("npvInitial").value);
+  if (isNaN(initial) || initial <= 0) return;
+
+  if (!npvOverride.revenue) {
+    document.getElementById("npvAnnualRevenue").value = Math.round(initial * 0.20);
+    npvSetAutoState("npvAnnualRevenue", "npvRevenueBadge", "npvRevenueHint", true);
+  }
+  if (!npvOverride.costs) {
+    document.getElementById("npvAnnualCosts").value = Math.round(initial * 0.08);
+    npvSetAutoState("npvAnnualCosts", "npvCostsBadge", "npvCostsHint", true);
+  }
+  if (!npvOverride.growth) {
+    document.getElementById("npvGrowthRate").value = 5;
+    npvSetAutoState("npvGrowthRate", "npvGrowthBadge", "npvGrowthHint", true);
+  }
+}
+
+function npvWireAutoFill() {
+  // Trigger auto-fill with 500ms debounce on initial investment input
+  document.getElementById("npvInitial").addEventListener("input", () => {
+    clearTimeout(_npvAutoTimer);
+    _npvAutoTimer = setTimeout(npvAutoFill, 500);
+  });
+
+  // Mark a field as manually overridden when user edits it directly
+  [
+    ["npvAnnualRevenue", "revenue", "npvRevenueBadge", "npvRevenueHint"],
+    ["npvAnnualCosts",   "costs",   "npvCostsBadge",   "npvCostsHint"],
+    ["npvGrowthRate",    "growth",  "npvGrowthBadge",  "npvGrowthHint"],
+  ].forEach(([id, key, badgeId, hintId]) => {
+    document.getElementById(id).addEventListener("input", () => {
+      npvOverride[key] = true;
+      npvSetAutoState(id, badgeId, hintId, false);
+    });
+  });
+}
+
 async function calculateNpv() {
   const initialRaw  = document.getElementById("npvInitial").value.trim();
   const revenueRaw  = document.getElementById("npvAnnualRevenue").value.trim();
@@ -1144,6 +1211,7 @@ function wireEvents() {
 
   // ── NPV Calculator ──
   document.getElementById("npvCalcBtn").addEventListener("click", calculateNpv);
+  npvWireAutoFill();
 
   // Mark dirty when any input changes; track manual edits to discount rate
   ["npvInitial", "npvAnnualRevenue", "npvAnnualCosts", "npvGrowthRate", "npvLifespan"].forEach(id => {

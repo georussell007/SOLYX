@@ -1269,6 +1269,51 @@ select.npv-input {
 .npv-table .cum-positive { color: var(--green); font-weight: 700; }
 .npv-table .cum-negative { color: var(--red); }
 .npv-table .npv-auto-cf  { color: var(--accent); }
+
+/* ── NPV auto-fill indicators ── */
+.npv-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.npv-label-row .npv-label {
+  margin-bottom: 0;
+}
+.npv-auto-badge {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 5px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.npv-auto-badge--auto {
+  color: var(--accent);
+  background: rgba(255,159,26,0.12);
+  border: 1px solid rgba(255,159,26,0.3);
+}
+.npv-auto-badge--custom {
+  color: var(--text-dim);
+  background: rgba(74,82,96,0.15);
+  border: 1px solid var(--border);
+}
+.npv-input--auto {
+  border-left: 2px solid var(--accent) !important;
+  color: var(--accent);
+}
+.npv-input--custom {
+  border-left: 2px solid var(--border-light) !important;
+  color: var(--text);
+}
+.npv-auto-hint {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
 .npv-table-note {
   font-size: 10px;
   color: var(--text-dim);

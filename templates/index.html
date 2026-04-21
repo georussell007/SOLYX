@@ -167,14 +167,22 @@
                  placeholder="e.g. 1000000" autocomplete="off" />
         </div>
         <div class="npv-field">
-          <label class="npv-label" for="npvAnnualRevenue">EXPECTED ANNUAL REVENUE ($)</label>
+          <div class="npv-label-row">
+            <label class="npv-label" for="npvAnnualRevenue">EXPECTED ANNUAL REVENUE ($)</label>
+            <span class="npv-auto-badge" id="npvRevenueBadge" style="display:none;"></span>
+          </div>
           <input class="npv-input" id="npvAnnualRevenue" type="number" min="0"
                  placeholder="e.g. 500000" autocomplete="off" />
+          <div class="npv-auto-hint" id="npvRevenueHint" style="display:none;">Auto-estimated — click to override</div>
         </div>
         <div class="npv-field">
-          <label class="npv-label" for="npvAnnualCosts">ANNUAL OPERATING COSTS ($)</label>
+          <div class="npv-label-row">
+            <label class="npv-label" for="npvAnnualCosts">ANNUAL OPERATING COSTS ($)</label>
+            <span class="npv-auto-badge" id="npvCostsBadge" style="display:none;"></span>
+          </div>
           <input class="npv-input" id="npvAnnualCosts" type="number" min="0"
                  placeholder="e.g. 200000" autocomplete="off" />
+          <div class="npv-auto-hint" id="npvCostsHint" style="display:none;">Auto-estimated — click to override</div>
         </div>
         <div class="npv-field">
           <label class="npv-label" for="npvLifespan">INVESTMENT LIFESPAN (YEARS)</label>
@@ -197,9 +205,13 @@
           </select>
         </div>
         <div class="npv-field">
-          <label class="npv-label" for="npvGrowthRate">ANNUAL REVENUE GROWTH RATE (%)</label>
+          <div class="npv-label-row">
+            <label class="npv-label" for="npvGrowthRate">ANNUAL REVENUE GROWTH RATE (%)</label>
+            <span class="npv-auto-badge" id="npvGrowthBadge" style="display:none;"></span>
+          </div>
           <input class="npv-input" id="npvGrowthRate" type="number" step="0.1" min="-50" max="200"
                  placeholder="e.g. 5" value="0" autocomplete="off" />
+          <div class="npv-auto-hint" id="npvGrowthHint" style="display:none;">Auto-estimated — click to override</div>
         </div>
         <div class="npv-field">
           <label class="npv-label" for="npvDiscountRate">DISCOUNT RATE (%) — pre-filled from WACC</label>
